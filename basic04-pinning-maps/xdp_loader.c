@@ -73,7 +73,9 @@ int pin_maps_in_bpf_object(struct bpf_object *bpf_obj, const char *subdir)
 {
 	char map_filename[PATH_MAX];
 	char pin_dir[PATH_MAX];
+	struct bpf_map *map;
 	int err, len;
+	int map_fd;
 
 	len = snprintf(pin_dir, PATH_MAX, "%s/%s", pin_basedir, subdir);
 	if (len < 0) {
@@ -88,26 +90,56 @@ int pin_maps_in_bpf_object(struct bpf_object *bpf_obj, const char *subdir)
 		return EXIT_FAIL_OPTION;
 	}
 
-	/* Existing/previous XDP prog might not have cleaned up */
+	//detect if there is pinned map
 	if (access(map_filename, F_OK ) != -1 ) {
+
+		map_fd = bpf_obj_get(map_filename);
+		if(map_fd < 0){
+			fprintf(stderr,"cant get map from %s\n", map_filename);
+			return EXIT_FAIL_BPF;
+		}
+
+		map = bpf_object__find_map_by_name(bpf_obj, map_name);
+		if(!map){
+			fprintf(stderr,"cant find map in BPF obj\n");
+			return EXIT_FAIL_BPF;
+		}
+		//reuse map fd
+		err = bpf_map__reuse_fd(map, map_fd);
+		if(err){
+			fprintf(stderr,"reusing map fd failed\n");
+			return EXIT_FAIL_BPF;
+		}
+
+		if(verbose) printf("reuse map at %s\n", map_filename);
+
+		close(map_fd);
+	}else{
 		if (verbose)
 			printf(" - Unpinning (remove) prev maps in %s/\n",
 			       pin_dir);
-
-		/* Basically calls unlink(3) on map_filename */
-		err = bpf_object__unpin_maps(bpf_obj, pin_dir);
-		if (err) {
-			fprintf(stderr, "ERR: UNpinning maps in %s\n", pin_dir);
+		err = bpf_object__pin_maps(bpf_obj, pin_dir);
+		if (err)
 			return EXIT_FAIL_BPF;
-		}
+		// /* Basically calls unlink(3) on map_filename */
+		// err = bpf_object__unpin_maps(bpf_obj, pin_dir);
+		// if (err) {
+		// 	fprintf(stderr, "ERR: UNpinning maps in %s\n", pin_dir);
+		// 	return EXIT_FAIL_BPF;
+		// }
 	}
-	if (verbose)
-		printf(" - Pinning maps in %s/\n", pin_dir);
+
+	// err = bpf_object__load(bpf_obj);
+	// if(err){
+	// 	fprintf(stderr,"failed to load BPF obj\n");
+	// 	return EXIT_FAIL_BPF;
+	// }
+
+
+	// if (verbose)
+	// 	printf(" - Pinning maps in %s/\n", pin_dir);
 
 	/* This will pin all maps in our bpf_object */
-	err = bpf_object__pin_maps(bpf_obj, pin_dir);
-	if (err)
-		return EXIT_FAIL_BPF;
 
 	return 0;
 }
