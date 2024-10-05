@@ -1,0 +1,12 @@
+
+
+2. setting alias 
+    eval $(../testenv/testenv.sh alias)
+
+1. setting up test lab
+    t setup --name veth1
+
+3. using xdp-loader to load xdpkernel.o file
+    sudo ../lib/xdp-tools/xdp-loader/xdp-loader load -m skb veth1 xdp_prog_kern.o
+
+4. t status +Ethernet port name || sudo xdp-loader status +Ethernet port name

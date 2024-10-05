@@ -54,6 +54,13 @@ static int parse_mac(char *str, unsigned char mac[ETH_ALEN])
 {
 	/* Assignment 3: parse a MAC address in this function and place the
 	 * result in the mac array */
+	int new_values[ETH_ALEN];
+	sscanf(str, "%x:%x:%x:%x:%x:%x",&new_values[0], &new_values[1], &new_values[2],&new_values[3], &new_values[4], &new_values[5]);
+	
+
+	for (int i = 0; i < ETH_ALEN; ++i) {
+		mac[i] = (unsigned char)new_values[i];
+	}
 
 	return 0;
 }
@@ -123,20 +130,30 @@ int main(int argc, char **argv)
 		return EXIT_FAIL_OPTION;
 	}
 
-
 	/* Assignment 3: open the tx_port map corresponding to the cfg.ifname interface */
-	map_fd = -1;
+	map_fd = bpf_obj_get(pin_dir);
+	if (map_fd < 0) {
+		fprintf(stderr, "ERR: opening tx_port map: %s\n", strerror(errno));
+		return EXIT_FAIL_BPF;
+	}
 
 	printf("map dir: %s\n", pin_dir);
 
 	if (redirect_map) {
 		/* setup a virtual port for the static redirect */
 		i = 0;
-		bpf_map_update_elem(map_fd, &i, &cfg.redirect_ifindex, 0);
+		if (bpf_map_update_elem(map_fd, &i, &cfg.redirect_ifindex, 0) < 0) {
+			fprintf(stderr, "ERR: updating tx_port map: %s\n", strerror(errno));
+			return EXIT_FAIL_BPF;
+		}
 		printf("redirect from ifnum=%d to ifnum=%d\n", cfg.ifindex, cfg.redirect_ifindex);
 
 		/* Assignment 3: open the redirect_params map corresponding to the cfg.ifname interface */
-		map_fd = -1;
+		map_fd = bpf_obj_get(pin_dir);
+		if (map_fd < 0) {
+			fprintf(stderr, "ERR: opening redirect_params map: %s\n", strerror(errno));
+			return EXIT_FAIL_BPF;
+		}
 
 		/* Setup the mapping containing MAC addresses */
 		if (write_iface_params(map_fd, src, dest) < 0) {
